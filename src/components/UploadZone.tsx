@@ -382,7 +382,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({
                 {isUploading ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Przesyłanie...
+                    Przesyłanie... {uploadProgress}%
                   </>
                 ) : uploadStatus === 'success' ? (
                   <>
@@ -402,9 +402,21 @@ const UploadZone: React.FC<UploadZoneProps> = ({
                 )}
               </motion.button>
 
+              {/* Progress Bar */}
+              {isUploading && (
+                <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-purple-500 to-pink-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${uploadProgress}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
+              )}
+
               {/* Info Note */}
               <p className="text-center text-white/40 text-xs mt-4">
-                * W wersji demo pliki nie są faktycznie przesyłane na serwer
+                Zdjęcia zostaną przesłane na serwer FTP
               </p>
             </motion.div>
           )}
