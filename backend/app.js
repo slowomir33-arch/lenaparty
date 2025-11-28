@@ -97,7 +97,10 @@ const fileFilter = (req, file, cb) => {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: CONFIG.maxFileSize },
+  limits: { 
+    fileSize: CONFIG.maxFileSize,
+    files: 1000, // Maximum number of files
+  },
 });
 
 // ============================================
@@ -307,7 +310,7 @@ app.delete('/api/albums/:id', async (req, res) => {
 // ----------------------------------------
 // POST /api/albums/:albumId/photos - Upload photos to album
 // ----------------------------------------
-app.post('/api/albums/:albumId/photos', upload.array('photos', 100), async (req, res) => {
+app.post('/api/albums/:albumId/photos', upload.array('photos', 1000), async (req, res) => {
   try {
     const { albumId } = req.params;
     const data = await readAlbumsData();
@@ -417,7 +420,7 @@ app.delete('/api/albums/:albumId/photos/:photoId', async (req, res) => {
 // ----------------------------------------
 // POST /api/upload - Bulk upload (create album + photos)
 // ----------------------------------------
-app.post('/api/upload', upload.array('photos', 100), async (req, res) => {
+app.post('/api/upload', upload.array('photos', 1000), async (req, res) => {
   try {
     const { albumName } = req.body;
     

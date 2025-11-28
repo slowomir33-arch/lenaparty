@@ -27,6 +27,52 @@ const UploadZone: React.FC<UploadZoneProps> = ({
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Helper function to recursively read all files from a directory
+  const readAllFilesFromDirectory = async (
+    dirEntry: FileSystemDirectoryEntry
+  ): Promise<File[]> => {
+    const files: File[] = [];
+    const dirReader = dirEntry.createReader();
+
+    // Read all entries (readEntries may need multiple calls for large directories)
+    const readAllEntries = async (): Promise<FileSystemEntry[]> => {
+      const allEntries: FileSystemEntry[] = [];
+      
+      const readBatch = (): Promise<FileSystemEntry[]> => {
+        return new Promise((resolve) => {
+          dirReader.readEntries((entries) => resolve(entries));
+        });
+      };
+
+      let batch = await readBatch();
+      while (batch.length > 0) {
+        allEntries.push(...batch);
+        batch = await readBatch();
+      }
+      
+      return allEntries;
+    };
+
+    const entries = await readAllEntries();
+
+    for (const entry of entries) {
+      if (entry.isFile) {
+        const file = await new Promise<File>((resolve) => {
+          (entry as FileSystemFileEntry).file(resolve);
+        });
+        if (file.type.startsWith('image/')) {
+          files.push(file);
+        }
+      } else if (entry.isDirectory) {
+        // Recursively read subdirectories
+        const subFiles = await readAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+        files.push(...subFiles);
+      }
+    }
+
+    return files;
+  };
+
   // Handle file/folder drop
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -35,69 +81,64 @@ const UploadZone: React.FC<UploadZoneProps> = ({
     const items = Array.from(e.dataTransfer.items);
     const folders: UploadedFolder[] = [];
 
-    for (const item of items) {
+    // Process all items in parallel for better performance
+    const processingPromises = items.map(async (item) => {
       if (item.kind === 'file') {
         const entry = item.webkitGetAsEntry?.();
         
         if (entry?.isDirectory) {
-          // Handle folder
-          const dirReader = (entry as FileSystemDirectoryEntry).createReader();
-          const files: File[] = [];
-          const previews: string[] = [];
-
-          await new Promise<void>((resolve) => {
-            const readEntries = () => {
-              dirReader.readEntries(async (entries) => {
-                if (entries.length === 0) {
-                  resolve();
-                  return;
-                }
-
-                for (const fileEntry of entries) {
-                  if (fileEntry.isFile) {
-                    const file = await new Promise<File>((res) => {
-                      (fileEntry as FileSystemFileEntry).file(res);
-                    });
-                    
-                    if (file.type.startsWith('image/')) {
-                      files.push(file);
-                      // Create preview
-                      const preview = URL.createObjectURL(file);
-                      previews.push(preview);
-                    }
-                  }
-                }
-                readEntries();
-              });
-            };
-            readEntries();
-          });
-
+          // Handle folder - read all files recursively
+          const files = await readAllFilesFromDirectory(entry as FileSystemDirectoryEntry);
+          
           if (files.length > 0) {
-            folders.push({
+            // Sort files by name for consistent ordering
+            files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+            
+            // Create previews (limit to first 10 for performance)
+            const previews = files.slice(0, 10).map(file => URL.createObjectURL(file));
+            
+            return {
               name: entry.name,
               files,
               previews,
-            });
+            };
           }
         } else {
-          // Handle single file - group into "Untitled Album"
+          // Handle single file
           const file = item.getAsFile();
           if (file?.type.startsWith('image/')) {
-            const existingUntitled = folders.find(f => f.name === 'Nowy Album');
-            if (existingUntitled) {
-              existingUntitled.files.push(file);
-              existingUntitled.previews.push(URL.createObjectURL(file));
-            } else {
-              folders.push({
-                name: 'Nowy Album',
-                files: [file],
-                previews: [URL.createObjectURL(file)],
-              });
-            }
+            return {
+              isSingleFile: true,
+              file,
+            };
           }
         }
       }
+      return null;
+    });
+
+    const results = await Promise.all(processingPromises);
+
+    // Collect single files into "Nowy Album"
+    const singleFiles: File[] = [];
+    
+    for (const result of results) {
+      if (result === null) continue;
+      
+      if ('isSingleFile' in result) {
+        singleFiles.push(result.file);
+      } else {
+        folders.push(result);
+      }
+    }
+
+    // Group single files into one album
+    if (singleFiles.length > 0) {
+      folders.push({
+        name: 'Nowy Album',
+        files: singleFiles,
+        previews: singleFiles.slice(0, 10).map(f => URL.createObjectURL(f)),
+      });
     }
 
     if (folders.length > 0) {
@@ -239,7 +280,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({
           <div>
             <h2 className="text-2xl font-bold text-white">Upload Albumów</h2>
             <p className="text-white/60 text-sm mt-1">
-              Przeciągnij foldery lub wybierz je z dysku
+              Przeciągnij wiele folderów naraz lub wybierz je z dysku
             </p>
           </div>
           {onClose && (
@@ -277,7 +318,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({
               {isDragOver ? 'Upuść tutaj!' : 'Przeciągnij foldery ze zdjęciami'}
             </h3>
             <p className="text-white/50 text-sm mb-6">
-              Jeden folder = Jeden album
+              Możesz przeciągnąć wiele folderów naraz • Jeden folder = Jeden album
             </p>
 
             {/* Folder Select Button */}
