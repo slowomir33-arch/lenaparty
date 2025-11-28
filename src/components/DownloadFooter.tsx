@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Download, Loader2, CheckCircle } from 'lucide-react';
-import { downloadAlbumAsZip } from '@/utils/downloader';
+import { downloadAlbum } from '@/utils/downloader';
 import type { Album } from '@/types';
 
 interface DownloadFooterProps {
@@ -10,27 +10,22 @@ interface DownloadFooterProps {
 
 const DownloadFooter: React.FC<DownloadFooterProps> = ({ album }) => {
   const [isDownloading, setIsDownloading] = useState(false);
-  const [progress, setProgress] = useState(0);
   const [downloadComplete, setDownloadComplete] = useState(false);
 
   const handleDownload = async () => {
     if (!album || isDownloading) return;
 
     setIsDownloading(true);
-    setProgress(0);
     setDownloadComplete(false);
 
     try {
-      await downloadAlbumAsZip(album.photos, album.name, (p) => {
-        setProgress(Math.round(p));
-      });
+      await downloadAlbum(album);
       setDownloadComplete(true);
       setTimeout(() => setDownloadComplete(false), 3000);
     } catch (error) {
       console.error('Download error:', error);
     } finally {
       setIsDownloading(false);
-      setProgress(0);
     }
   };
 
@@ -66,22 +61,12 @@ const DownloadFooter: React.FC<DownloadFooterProps> = ({ album }) => {
           whileHover={{ scale: isDownloading ? 1 : 1.02 }}
           whileTap={{ scale: isDownloading ? 1 : 0.98 }}
         >
-          {/* Progress bar background */}
-          {isDownloading && (
-            <motion.div
-              className="absolute inset-0 bg-white/20"
-              initial={{ width: '0%' }}
-              animate={{ width: `${progress}%` }}
-              transition={{ duration: 0.3 }}
-            />
-          )}
-
           {/* Button content */}
           <span className="relative flex items-center justify-center gap-3">
             {isDownloading ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Pobieranie... {progress}%
+                Pobieranie...
               </>
             ) : downloadComplete ? (
               <>
