@@ -463,6 +463,126 @@ app.delete('/api/albums/:id', async (req, res) => {
 });
 
 // ----------------------------------------
+// POST /api/albums/:id/photos - Add photos to existing album (for batch upload)
+// ----------------------------------------
+app.post('/api/albums/:id/photos', upload.array('photos', 100), async (req, res) => {
+  try {
+    const data = await readAlbumsData();
+    const albumIndex = data.albums.findIndex(a => a.id === req.params.id);
+    
+    if (albumIndex === -1) {
+      return res.status(404).json({ error: 'Album nie znaleziony' });
+    }
+    
+    const album = data.albums[albumIndex];
+    const albumPath = path.join(CONFIG.albumsDir, album.id);
+    const lightPath = path.join(albumPath, 'light');
+    const maxPath = path.join(albumPath, 'max');
+    
+    // Ensure directories exist
+    if (!existsSync(lightPath)) mkdirSync(lightPath, { recursive: true });
+    if (!existsSync(maxPath)) mkdirSync(maxPath, { recursive: true });
+    
+    const newPhotos = [];
+    
+    // Separate files by folder prefix
+    const lightFiles = [];
+    const maxFiles = [];
+    const otherFiles = [];
+    
+    for (const file of req.files) {
+      const filename = file.filename;
+      if (filename.startsWith('light___')) {
+        lightFiles.push({ ...file, cleanName: filename.replace('light___', '') });
+      } else if (filename.startsWith('max___')) {
+        maxFiles.push({ ...file, cleanName: filename.replace('max___', '') });
+      } else {
+        otherFiles.push(file);
+      }
+    }
+    
+    const hasLightMax = lightFiles.length > 0 && maxFiles.length > 0;
+    
+    if (hasLightMax) {
+      // Move light files
+      for (const file of lightFiles) {
+        const targetPath = path.join(lightPath, file.cleanName);
+        await fs.rename(file.path, targetPath);
+      }
+      // Move max files
+      for (const file of maxFiles) {
+        const targetPath = path.join(maxPath, file.cleanName);
+        await fs.rename(file.path, targetPath);
+      }
+      
+      // Create photo entries from light files
+      for (const file of lightFiles) {
+        const photoId = uuidv4();
+        const imagePath = path.join(lightPath, file.cleanName);
+        const thumbFilename = path.basename(file.cleanName, path.extname(file.cleanName)) + '.jpg';
+        await generateThumbnail(imagePath, album.id, thumbFilename);
+        const dimensions = await getImageDimensions(imagePath);
+        
+        newPhotos.push({
+          id: photoId,
+          src: `/uploads/albums/${album.id}/light/${file.cleanName}`,
+          thumbnail: `/uploads/thumbnails/${album.id}/${thumbFilename}`,
+          title: file.cleanName.replace(/\.[^/.]+$/, ''),
+          width: dimensions.width,
+          height: dimensions.height,
+          uploadedAt: new Date().toISOString(),
+        });
+      }
+      
+      album.hasLightMax = true;
+    } else {
+      // Flat structure
+      for (const file of otherFiles.length > 0 ? otherFiles : req.files) {
+        const photoId = uuidv4();
+        const safeFilename = sanitizeFilename(file.originalname);
+        const uniqueFilename = await getUniqueFilename(albumPath, safeFilename);
+        const newPath = path.join(albumPath, uniqueFilename);
+        
+        await fs.rename(file.path, newPath);
+        
+        const thumbFilename = path.basename(uniqueFilename, path.extname(uniqueFilename)) + '.jpg';
+        await generateThumbnail(newPath, album.id, thumbFilename);
+        const dimensions = await getImageDimensions(newPath);
+        
+        newPhotos.push({
+          id: photoId,
+          src: `/uploads/albums/${album.id}/${uniqueFilename}`,
+          thumbnail: `/uploads/thumbnails/${album.id}/${thumbFilename}`,
+          title: file.originalname.replace(/\.[^/.]+$/, ''),
+          width: dimensions.width,
+          height: dimensions.height,
+          uploadedAt: new Date().toISOString(),
+        });
+      }
+    }
+    
+    // Add new photos to album
+    album.photos.push(...newPhotos);
+    
+    // Update thumbnail if album had none
+    if (!album.thumbnail && newPhotos.length > 0) {
+      album.thumbnail = newPhotos[0].thumbnail;
+    }
+    
+    album.updatedAt = new Date().toISOString();
+    await writeAlbumsData(data);
+    
+    res.status(201).json({
+      message: `Dodano ${newPhotos.length} zdjęć do albumu`,
+      photos: newPhotos,
+    });
+  } catch (error) {
+    console.error('Error adding photos:', error);
+    res.status(500).json({ error: 'Błąd podczas dodawania zdjęć' });
+  }
+});
+
+// ----------------------------------------
 // POST /api/upload - Bulk upload (create album + photos)
 // Supports both:
 // - Old format: flat list of photos

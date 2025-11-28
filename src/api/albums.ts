@@ -154,30 +154,24 @@ export async function deletePhoto(
 // BULK UPLOAD (Create album + upload photos)
 // ============================================
 
-/**
- * Upload entire album (creates album + uploads all photos)
- */
-export async function uploadAlbum(
-  albumName: string,
-  files: File[],
-  onProgress?: (progress: number) => void
-): Promise<{ message: string; album: Album }> {
-  const formData = new FormData();
-  formData.append('albumName', albumName);
-  
-  files.forEach((file) => {
-    formData.append('photos', file);
-  });
+const BATCH_SIZE = 30; // Upload 30 files at a time to avoid HTTP/2 errors
 
+/**
+ * Upload a single batch of files
+ */
+async function uploadBatch(
+  url: string,
+  formData: FormData,
+  onProgress?: (loaded: number, total: number) => void
+): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     
-    xhr.open('POST', `${API_BASE_URL}/api/upload`);
+    xhr.open('POST', url);
     
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable && onProgress) {
-        const progress = (event.loaded / event.total) * 100;
-        onProgress(progress);
+        onProgress(event.loaded, event.total);
       }
     };
     
@@ -189,15 +183,100 @@ export async function uploadAlbum(
           const error = JSON.parse(xhr.responseText);
           reject(new Error(error.error || 'Upload failed'));
         } catch {
-          reject(new Error('Upload failed'));
+          reject(new Error(`Upload failed: ${xhr.status}`));
         }
       }
     };
     
     xhr.onerror = () => reject(new Error('Network error'));
+    xhr.ontimeout = () => reject(new Error('Upload timeout'));
     
+    xhr.timeout = 300000; // 5 minutes timeout per batch
     xhr.send(formData);
   });
+}
+
+/**
+ * Upload entire album (creates album + uploads all photos in batches)
+ */
+export async function uploadAlbum(
+  albumName: string,
+  files: File[],
+  onProgress?: (progress: number) => void
+): Promise<{ message: string; album: Album }> {
+  
+  // If small number of files, upload directly
+  if (files.length <= BATCH_SIZE) {
+    const formData = new FormData();
+    formData.append('albumName', albumName);
+    files.forEach((file) => formData.append('photos', file));
+    
+    const result = await uploadBatch(
+      `${API_BASE_URL}/api/upload`,
+      formData,
+      (loaded, total) => onProgress?.(loaded / total * 100)
+    );
+    return result as { message: string; album: Album };
+  }
+  
+  // For large uploads, use batch upload
+  console.log(`📦 Batch upload: ${files.length} files in batches of ${BATCH_SIZE}`);
+  
+  // Step 1: Create album with first batch
+  const firstBatch = files.slice(0, BATCH_SIZE);
+  const formData = new FormData();
+  formData.append('albumName', albumName);
+  firstBatch.forEach((file) => formData.append('photos', file));
+  
+  let totalUploaded = 0;
+  const totalFiles = files.length;
+  
+  const createResult = await uploadBatch(
+    `${API_BASE_URL}/api/upload`,
+    formData,
+    (loaded, total) => {
+      const batchProgress = loaded / total;
+      const overallProgress = (totalUploaded + batchProgress * firstBatch.length) / totalFiles * 100;
+      onProgress?.(overallProgress);
+    }
+  ) as { message: string; album: Album };
+  
+  totalUploaded += firstBatch.length;
+  onProgress?.((totalUploaded / totalFiles) * 100);
+  
+  const albumId = createResult.album.id;
+  
+  // Step 2: Upload remaining files in batches
+  const remainingFiles = files.slice(BATCH_SIZE);
+  
+  for (let i = 0; i < remainingFiles.length; i += BATCH_SIZE) {
+    const batch = remainingFiles.slice(i, i + BATCH_SIZE);
+    const batchFormData = new FormData();
+    batch.forEach((file) => batchFormData.append('photos', file));
+    
+    await uploadBatch(
+      `${API_BASE_URL}/api/albums/${albumId}/photos`,
+      batchFormData,
+      (loaded, total) => {
+        const batchProgress = loaded / total;
+        const overallProgress = (totalUploaded + batchProgress * batch.length) / totalFiles * 100;
+        onProgress?.(overallProgress);
+      }
+    );
+    
+    totalUploaded += batch.length;
+    onProgress?.((totalUploaded / totalFiles) * 100);
+    
+    console.log(`✅ Batch ${Math.ceil((i + BATCH_SIZE) / BATCH_SIZE) + 1}: ${totalUploaded}/${totalFiles} files`);
+  }
+  
+  // Fetch final album state
+  const finalAlbum = await getAlbumById(albumId);
+  
+  return {
+    message: `Album "${albumName}" utworzony z ${finalAlbum.photos.length} zdjęciami`,
+    album: finalAlbum,
+  };
 }
 
 // ============================================
