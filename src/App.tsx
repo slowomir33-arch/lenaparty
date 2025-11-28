@@ -134,6 +134,14 @@ const MobileCinemaMode: React.FC<MobileCinemaModeProps> = ({
   const isPinching = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
+
+  // Handle Android back button - close cinema mode instead of leaving page
+  useEffect(() => {
+    window.history.pushState({ cinemaMode: true }, '');
+    const handlePopState = () => onClose();
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [onClose]);
   useEffect(() => {
     const handleFullscreenChange = () => {
       const isNowFullscreen = !!document.fullscreenElement;
