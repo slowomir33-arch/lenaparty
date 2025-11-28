@@ -106,10 +106,10 @@ const UploadZone: React.FC<UploadZoneProps> = ({
         } else {
           // Handle single file
           const file = item.getAsFile();
-          if (file?.type.startsWith('image/')) {
+          if (file && file.type.startsWith('image/')) {
             return {
-              isSingleFile: true,
-              file,
+              isSingleFile: true as const,
+              file: file,
             };
           }
         }
@@ -125,7 +125,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({
     for (const result of results) {
       if (result === null) continue;
       
-      if ('isSingleFile' in result) {
+      if ('isSingleFile' in result && result.file) {
         singleFiles.push(result.file);
       } else {
         folders.push(result);
