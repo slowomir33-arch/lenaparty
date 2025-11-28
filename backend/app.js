@@ -43,15 +43,22 @@ if (!existsSync(CONFIG.dataFile)) {
 // MIDDLEWARE
 // ============================================
 
-app.use(cors({
-  origin: [
-    'http://localhost:5173', 
-    'http://localhost:3000',
-    'https://lenaparty.pl',
-    'https://www.lenaparty.pl'
-  ],
-  credentials: true,
-}));
+// Serve .well-known for SSL certificate validation (Let's Encrypt)
+app.use('/.well-known', express.static('.well-known'));
+
+// Manual CORS headers to ensure they are always set
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  res.header('Access-Control-Allow-Origin', origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 app.use(express.json());
 
@@ -64,14 +71,14 @@ app.use('/uploads', express.static(CONFIG.uploadsDir));
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const albumId = req.params.albumId || req.body.albumId || 'temp';
-    const albumPath = path.join(CONFIG.albumsDir, albumId);
+    // Always use temp directory first, files will be moved after processing
+    const tempPath = path.join(CONFIG.albumsDir, 'temp');
     
-    if (!existsSync(albumPath)) {
-      mkdirSync(albumPath, { recursive: true });
+    if (!existsSync(tempPath)) {
+      mkdirSync(tempPath, { recursive: true });
     }
     
-    cb(null, albumPath);
+    cb(null, tempPath);
   },
   filename: (req, file, cb) => {
     const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
