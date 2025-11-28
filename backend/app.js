@@ -81,8 +81,9 @@ const storage = multer.diskStorage({
     cb(null, tempPath);
   },
   filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
+    // Keep original filename but make it safe
+    const safeName = sanitizeFilename(file.originalname);
+    cb(null, safeName);
   },
 });
 
@@ -106,6 +107,44 @@ const upload = multer({
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+// Sanitize filename - remove special characters, keep Polish letters
+function sanitizeFilename(filename) {
+  // Decode URI components if encoded
+  let decoded = filename;
+  try {
+    decoded = decodeURIComponent(filename);
+  } catch (e) {
+    // Keep original if decoding fails
+  }
+  
+  // Replace problematic characters but keep Polish letters and spaces
+  const ext = path.extname(decoded);
+  const name = path.basename(decoded, ext);
+  
+  // Replace characters that are problematic for filesystems
+  const safeName = name
+    .replace(/[<>:"/\\|?*]/g, '_')  // Replace filesystem-unsafe chars
+    .replace(/\s+/g, ' ')           // Normalize spaces
+    .trim();
+  
+  return safeName + ext;
+}
+
+// Get unique filename if file already exists
+async function getUniqueFilename(dir, filename) {
+  const ext = path.extname(filename);
+  const name = path.basename(filename, ext);
+  let finalName = filename;
+  let counter = 1;
+  
+  while (existsSync(path.join(dir, finalName))) {
+    finalName = `${name} (${counter})${ext}`;
+    counter++;
+  }
+  
+  return finalName;
+}
 
 async function readAlbumsData() {
   try {
@@ -447,30 +486,35 @@ app.post('/api/upload', upload.array('photos', 1000), async (req, res) => {
       mkdirSync(albumPath, { recursive: true });
     }
     
-    // Prepare photos for FTP upload
+    // Prepare photos
     const ftpPhotos = [];
     
     for (const file of req.files) {
       const photoId = uuidv4();
-      const newFilename = `${photoId}${path.extname(file.originalname)}`;
-      const newPath = path.join(albumPath, newFilename);
       
-      // Move file
+      // Use original filename (already sanitized by multer), ensure uniqueness
+      const originalExt = path.extname(file.originalname);
+      const originalName = path.basename(file.originalname, originalExt);
+      const safeFilename = sanitizeFilename(file.originalname);
+      const uniqueFilename = await getUniqueFilename(albumPath, safeFilename);
+      const newPath = path.join(albumPath, uniqueFilename);
+      
+      // Move file from temp to album directory
       await fs.rename(file.path, newPath);
       
-      // Generate thumbnail
-      const thumbnailFilename = `${photoId}.jpg`;
-      const thumbPath = await generateThumbnail(newPath, albumId, thumbnailFilename);
+      // Generate thumbnail with same base name
+      const thumbFilename = path.basename(uniqueFilename, path.extname(uniqueFilename)) + '.jpg';
+      const thumbPath = await generateThumbnail(newPath, albumId, thumbFilename);
       
       // Get dimensions
       const dimensions = await getImageDimensions(newPath);
       
-      // Add to FTP upload queue
+      // Add to photos list
       ftpPhotos.push({
         photoPath: newPath,
         thumbPath: thumbPath,
-        filename: newFilename,
-        thumbFilename: thumbnailFilename,
+        filename: uniqueFilename,
+        thumbFilename: thumbFilename,
         photoId,
         originalName: file.originalname,
         dimensions,
