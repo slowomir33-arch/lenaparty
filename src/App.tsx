@@ -782,15 +782,6 @@ const GalleryPage: React.FC = () => {
             </button>
           </div>
         )}
-
-        {/* Guest mode indicator */}
-        {!canDownload && (
-          <div className="p-4 border-t border-white/10">
-            <p className="text-white/40 text-xs text-center">
-              Tryb gościa - tylko podgląd
-            </p>
-          </div>
-        )}
       </motion.aside>
 
       {/* Overlay for mobile */}
