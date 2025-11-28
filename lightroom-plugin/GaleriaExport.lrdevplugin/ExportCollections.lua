@@ -31,6 +31,7 @@ local LrColor = import 'LrColor'
 
 local NAMING_TOKENS = {
   { id = "album", label = "📁 Nazwa albumu", token = "ALBUM_NAME", preview = "NazwaAlbumu", isAlbumName = true },
+  { id = "version", label = "💾 Wersja (light/max)", token = "VERSION", preview = "light", isVersion = true },
   { id = "name", label = "📷 Oryginalna nazwa", token = "{{image_name}}", preview = "DSC_1234" },
   { id = "seq", label = "🔢 Numer (001)", token = "{{sequence_001}}", preview = "001" },
   { id = "date", label = "📅 Data", token = "{{date_YYYY}}-{{date_MM}}-{{date_DD}}", preview = "2025-11-28" },
@@ -186,7 +187,7 @@ local function sanitizeText(text)
 end
 
 -- Funkcja do budowania tokena LR z listy wybranych tokenów
-local function buildTokenString(selectedTokens, customText, albumName)
+local function buildTokenString(selectedTokens, customText, albumName, versionName)
   local result = ""
   local safeCustomText = sanitizeText(customText)
   local safeAlbumName = sanitizeText(albumName)
@@ -198,6 +199,8 @@ local function buildTokenString(selectedTokens, customText, albumName)
           result = result .. safeCustomText
         elseif token.isAlbumName then
           result = result .. (safeAlbumName ~= "" and safeAlbumName or "Album")
+        elseif token.isVersion then
+          result = result .. (versionName or "light")
         else
           result = result .. token.token
         end
@@ -209,7 +212,7 @@ local function buildTokenString(selectedTokens, customText, albumName)
 end
 
 -- Funkcja do generowania podglądu
-local function buildPreviewString(selectedTokens, customText, albumName)
+local function buildPreviewString(selectedTokens, customText, albumName, versionName)
   local result = ""
   local safeCustomText = sanitizeText(customText)
   local safeAlbumName = sanitizeText(albumName)
@@ -221,6 +224,8 @@ local function buildPreviewString(selectedTokens, customText, albumName)
           result = result .. (safeCustomText ~= "" and safeCustomText or "MojTekst")
         elseif token.isAlbumName then
           result = result .. (safeAlbumName ~= "" and safeAlbumName or "NazwaAlbumu")
+        elseif token.isVersion then
+          result = result .. (versionName or "light")
         else
           result = result .. token.preview
         end
@@ -419,31 +424,37 @@ local function showSelectionDialog(allCollections)
       f:row {
         spacing = f:label_spacing(),
         tokenButtons[1], -- Album
-        tokenButtons[2], -- Oryginalna nazwa
-        tokenButtons[3], -- Numer
+        tokenButtons[2], -- Wersja (light/max)
+        tokenButtons[3], -- Oryginalna nazwa
       },
       
       -- Kafelki tokenów - rząd 2
       f:row {
         spacing = f:label_spacing(),
-        tokenButtons[4], -- Data
-        tokenButtons[5], -- Rok
-        tokenButtons[6], -- Własny tekst
+        tokenButtons[4], -- Numer
+        tokenButtons[5], -- Data
+        tokenButtons[6], -- Rok
       },
       
-      -- Separatory
+      -- Kafelki tokenów - rząd 3
       f:row {
         spacing = f:label_spacing(),
-        tokenButtons[7], -- Myślnik
-        tokenButtons[8], -- Podkreślnik
+        tokenButtons[7], -- Własny tekst
+        tokenButtons[8], -- Myślnik
+        tokenButtons[9], -- Podkreślnik
+      },
+      
+      -- Przyciski kontrolne
+      f:row {
+        spacing = f:label_spacing(),
         f:push_button {
           title = "⬅️ Cofnij",
-          width = 80,
+          width = 100,
           action = removeLastToken,
         },
         f:push_button {
           title = "🗑️ Wyczyść",
-          width = 80,
+          width = 100,
           action = clearAllTokens,
         },
       },
@@ -552,12 +563,6 @@ local function doExportWithProgress(selectedCollections, destinationFolder, nami
       local photos = collection:getPhotos()
       
       if #photos > 0 then
-        -- Zbuduj nazewnictwo z nazwą albumu
-        local namingTokens = buildTokenString(namingConfig.tokens, namingConfig.customText, collectionName)
-        if namingTokens == "" then
-          namingTokens = "{{image_name}}"
-        end
-        
         -- Utwórz foldery
         local albumFolder = LrPathUtils.child(destinationFolder, collectionName)
         local lightFolder = LrPathUtils.child(albumFolder, "light")
@@ -566,14 +571,22 @@ local function doExportWithProgress(selectedCollections, destinationFolder, nami
         ensureFolder(lightFolder)
         ensureFolder(maxFolder)
         
-        -- LIGHT - batch export
+        -- LIGHT - batch export (z wersją "light")
+        local lightNamingTokens = buildTokenString(namingConfig.tokens, namingConfig.customText, collectionName, "light")
+        if lightNamingTokens == "" then
+          lightNamingTokens = "{{image_name}}"
+        end
         progressScope:setCaption(string.format("%s - Light (%d/%d)", collectionName, collectionIndex, totalCollections))
         local baseProgress = (collectionIndex - 1) / totalCollections
-        exportPhotosBatch(photos, EXPORT_SETTINGS.light, lightFolder, namingTokens, progressScope, baseProgress, 0.5 / totalCollections)
+        exportPhotosBatch(photos, EXPORT_SETTINGS.light, lightFolder, lightNamingTokens, progressScope, baseProgress, 0.5 / totalCollections)
         
-        -- MAX - batch export
+        -- MAX - batch export (z wersją "max")
+        local maxNamingTokens = buildTokenString(namingConfig.tokens, namingConfig.customText, collectionName, "max")
+        if maxNamingTokens == "" then
+          maxNamingTokens = "{{image_name}}"
+        end
         progressScope:setCaption(string.format("%s - Max (%d/%d)", collectionName, collectionIndex, totalCollections))
-        exportPhotosBatch(photos, EXPORT_SETTINGS.max, maxFolder, namingTokens, progressScope, baseProgress + 0.5 / totalCollections, 0.5 / totalCollections)
+        exportPhotosBatch(photos, EXPORT_SETTINGS.max, maxFolder, maxNamingTokens, progressScope, baseProgress + 0.5 / totalCollections, 0.5 / totalCollections)
         
         exportedPhotos = exportedPhotos + #photos
       end
