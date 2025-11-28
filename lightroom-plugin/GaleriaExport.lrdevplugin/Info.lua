@@ -10,7 +10,11 @@ return {
       title = "Eksportuj albumy (Light + Max)",
       file = "ExportCollections.lua",
     },
+    {
+      title = "Uruchom skrypt zadania...",
+      file = "ScriptRunner.lua",
+    },
   },
   
-  VERSION = { major = 1, minor = 0, revision = 0, build = 1 },
+  VERSION = { major = 1, minor = 1, revision = 0, build = 1 },
 }
