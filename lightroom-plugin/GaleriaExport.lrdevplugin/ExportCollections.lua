@@ -172,16 +172,32 @@ end
 -- DIALOG WYBORU
 -- ============================================
 
+-- Funkcja pomocnicza do zamiany spacji na podkreślniki
+local function sanitizeText(text)
+  if not text then return "" end
+  -- Zamień spacje na podkreślniki
+  local result = string.gsub(text, " ", "_")
+  -- Usuń podwójne podkreślniki
+  result = string.gsub(result, "__+", "_")
+  -- Usuń podkreślniki na początku i końcu
+  result = string.gsub(result, "^_+", "")
+  result = string.gsub(result, "_+$", "")
+  return result
+end
+
 -- Funkcja do budowania tokena LR z listy wybranych tokenów
 local function buildTokenString(selectedTokens, customText, albumName)
   local result = ""
+  local safeCustomText = sanitizeText(customText)
+  local safeAlbumName = sanitizeText(albumName)
+  
   for _, tokenId in ipairs(selectedTokens) do
     for _, token in ipairs(NAMING_TOKENS) do
       if token.id == tokenId then
         if token.id == "custom" then
-          result = result .. customText
+          result = result .. safeCustomText
         elseif token.isAlbumName then
-          result = result .. (albumName or "Album")
+          result = result .. (safeAlbumName ~= "" and safeAlbumName or "Album")
         else
           result = result .. token.token
         end
@@ -195,13 +211,16 @@ end
 -- Funkcja do generowania podglądu
 local function buildPreviewString(selectedTokens, customText, albumName)
   local result = ""
+  local safeCustomText = sanitizeText(customText)
+  local safeAlbumName = sanitizeText(albumName)
+  
   for _, tokenId in ipairs(selectedTokens) do
     for _, token in ipairs(NAMING_TOKENS) do
       if token.id == tokenId then
         if token.id == "custom" then
-          result = result .. customText
+          result = result .. (safeCustomText ~= "" and safeCustomText or "MojTekst")
         elseif token.isAlbumName then
-          result = result .. (albumName or "NazwaAlbumu")
+          result = result .. (safeAlbumName ~= "" and safeAlbumName or "NazwaAlbumu")
         else
           result = result .. token.preview
         end
@@ -239,13 +258,14 @@ local function showSelectionDialog(allCollections)
     local function refreshDisplay()
       local displayParts = {}
       local previewParts = {}
+      local safeCustomText = sanitizeText(props.customText)
       
       for _, tokenId in ipairs(props.activeTokens) do
         for _, token in ipairs(NAMING_TOKENS) do
           if token.id == tokenId then
             table.insert(displayParts, token.label)
             if token.id == "custom" then
-              table.insert(previewParts, props.customText)
+              table.insert(previewParts, safeCustomText ~= "" and safeCustomText or "MojTekst")
             else
               table.insert(previewParts, token.preview)
             end
@@ -435,7 +455,15 @@ local function showSelectionDialog(allCollections)
         f:static_text { title = "Własny tekst:", width = 100 },
         f:edit_field {
           value = LrView.bind("customText"),
-          width = 200,
+          width = 300,
+          height_in_lines = 1,
+        },
+      },
+      f:row {
+        f:static_text { title = "", width = 100 },
+        f:static_text {
+          title = "Spacje zostaną zamienione na podkreślniki",
+          text_color = LrColor(0.5, 0.5, 0.5),
         },
       },
       
