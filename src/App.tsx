@@ -294,30 +294,30 @@ const Slider3D: React.FC<SliderProps> = ({ photos, onPhotoClick, activeIndex, on
 
     if (adjustedDiff === 0) {
       return {
-        transform: 'translateX(0%) translateZ(80px) scale(1.05)',
+        transform: 'translateX(0%) translateZ(100px) scale(1.75)',
         opacity: 1,
         zIndex: 30,
         filter: 'blur(0px)',
       };
     } else if (adjustedDiff === 1) {
       return {
-        transform: 'translateX(55%) translateZ(-30px) scale(0.75) rotateY(-25deg)',
-        opacity: 0.6,
+        transform: 'translateX(85%) translateZ(-50px) scale(0.6) rotateY(-30deg)',
+        opacity: 0.5,
         zIndex: 20,
-        filter: 'blur(2px)',
+        filter: 'blur(3px)',
       };
     } else if (adjustedDiff === -1) {
       return {
-        transform: 'translateX(-55%) translateZ(-30px) scale(0.75) rotateY(25deg)',
-        opacity: 0.6,
+        transform: 'translateX(-85%) translateZ(-50px) scale(0.6) rotateY(30deg)',
+        opacity: 0.5,
         zIndex: 20,
-        filter: 'blur(2px)',
+        filter: 'blur(3px)',
       };
     }
     return {
       transform: adjustedDiff > 0 
-        ? 'translateX(120%) scale(0.5)' 
-        : 'translateX(-120%) scale(0.5)',
+        ? 'translateX(150%) scale(0.4)' 
+        : 'translateX(-150%) scale(0.4)',
       opacity: 0,
       zIndex: 10,
     };
@@ -534,7 +534,7 @@ const GalleryPage: React.FC = () => {
 
       {/* Left Panel - Album Thumbnails */}
       <motion.aside
-        className={`fixed left-0 top-0 bottom-0 w-72 z-40 flex flex-col transition-transform duration-300 ${
+        className={`fixed left-0 top-0 bottom-0 w-52 z-40 flex flex-col transition-transform duration-300 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } md:translate-x-0`}
         style={{
@@ -643,7 +643,7 @@ const GalleryPage: React.FC = () => {
       )}
 
       {/* Main Content - 3D Slider */}
-      <main className="md:ml-72 min-h-screen relative z-10 flex items-center justify-center p-4">
+      <main className="md:ml-52 min-h-screen relative z-10 flex items-center justify-center p-4">
         {currentAlbum && (
           <Slider3D
             photos={currentAlbum.photos}
