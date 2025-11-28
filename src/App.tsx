@@ -202,7 +202,7 @@ const CinemaMode: React.FC<CinemaModeProps> = ({
         key={`${albumIndex}-${photoIndex}`}
         src={currentPhoto.src}
         alt={currentPhoto.title || ''}
-        className="max-w-[95vw] max-h-[85vh] object-contain cursor-default rounded-lg"
+        className="max-w-[95vw] max-h-[85vh] w-auto h-auto object-contain cursor-default rounded-lg"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ 
           opacity: 1, 
@@ -213,6 +213,13 @@ const CinemaMode: React.FC<CinemaModeProps> = ({
         transition={{ duration: 0.2 }}
         onClick={(e) => e.stopPropagation()}
         draggable={false}
+        onError={(e) => {
+          console.error('Failed to load image:', currentPhoto.src);
+          // Try thumbnail as fallback
+          if (currentPhoto.thumbnail) {
+            (e.target as HTMLImageElement).src = currentPhoto.thumbnail;
+          }
+        }}
       />
 
       {/* Swipe hint on mobile */}
@@ -356,20 +363,13 @@ const Slider3D: React.FC<SliderProps> = ({ photos, onPhotoClick, activeIndex, on
             }}
             onClick={() => index === activeIndex && onPhotoClick(activeIndex)}
           >
-            <div className="relative rounded-xl md:rounded-2xl overflow-hidden shadow-2xl shadow-black/50 group">
+            <div className="relative rounded-xl md:rounded-2xl overflow-hidden shadow-2xl shadow-black/50">
               <img
                 src={photo.thumbnail || photo.src}
                 alt={photo.title || ''}
                 className="w-full aspect-[3/2] object-cover"
                 draggable={false}
               />
-              {index === activeIndex && (
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                  <span className="text-white opacity-0 group-hover:opacity-100 transition-opacity text-sm md:text-lg font-medium">
-                    Kliknij aby powiększyć
-                  </span>
-                </div>
-              )}
             </div>
           </div>
         ))}
