@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { 
   Settings, Upload, Camera, RefreshCw, Wifi, WifiOff, 
   Download, CheckSquare, Square, ChevronLeft, ChevronRight, X,
-  Image, Menu, Maximize, Lock
+  Image, Menu, Maximize, Lock, Eye, EyeOff
 } from 'lucide-react';
 
 // Components
@@ -38,6 +38,8 @@ const CinemaMode: React.FC<CinemaModeProps> = ({
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
   const [dragOffset, setDragOffset] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const scrollbarRef = useRef<HTMLDivElement>(null);
 
   const currentAlbum = albums[albumIndex];
   const currentPhoto = currentAlbum?.photos[photoIndex];
@@ -67,6 +69,7 @@ const CinemaMode: React.FC<CinemaModeProps> = ({
   const goToFlatIndex = useCallback((flatIdx: number) => {
     if (flatIdx < 0 || flatIdx >= allPhotos.length) return;
     const target = allPhotos[flatIdx];
+    setImageLoaded(false); // Reset loading state
     setAlbumIndex(target.albumIndex);
     setPhotoIndex(target.photoIndex);
   }, [allPhotos]);
@@ -153,11 +156,26 @@ const CinemaMode: React.FC<CinemaModeProps> = ({
     setDragOffset(0);
   };
 
+  // Scrollbar click handler
+  const handleScrollbarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!scrollbarRef.current) return;
+    const rect = scrollbarRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    const newIndex = Math.round(percentage * (allPhotos.length - 1));
+    goToFlatIndex(Math.max(0, Math.min(newIndex, allPhotos.length - 1)));
+  };
+
   if (!currentPhoto) return null;
+
+  // Progress percentage for scrollbar
+  const progressPercentage = allPhotos.length > 1 
+    ? (currentFlatIndex / (allPhotos.length - 1)) * 100 
+    : 0;
 
   return (
     <motion.div
-      className="fixed inset-0 z-[100] flex items-center justify-center select-none overflow-hidden"
+      className="fixed inset-0 z-[100] flex flex-col select-none overflow-hidden"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -254,36 +272,78 @@ const CinemaMode: React.FC<CinemaModeProps> = ({
         )}
       </div>
 
-      {/* Photo - above backdrop, captures drag for swipe */}
+      {/* Photo container - centered with proper sizing */}
       <div 
-        className="relative z-[5] flex items-center justify-center cursor-grab active:cursor-grabbing"
+        className="flex-1 relative z-[5] flex items-center justify-center cursor-grab active:cursor-grabbing p-4 md:p-8"
         onMouseDown={handlePhotoDragStart}
         onMouseMove={handlePhotoDragMove}
         onMouseUp={handlePhotoDragEnd}
         onMouseLeave={handlePhotoDragEnd}
       >
-        <img
+        {/* Loading placeholder */}
+        {!imageLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-16 h-16 border-4 border-white/20 border-t-white/60 rounded-full animate-spin" />
+          </div>
+        )}
+        
+        <motion.img
           key={`${albumIndex}-${photoIndex}`}
           src={currentPhoto.src}
           alt={currentPhoto.title || ''}
-          className="max-w-[95vw] max-h-[85vh] w-auto h-auto object-contain rounded-lg shadow-2xl pointer-events-none"
+          className={`max-w-full max-h-[75vh] w-auto h-auto object-contain rounded-lg shadow-2xl pointer-events-none transition-opacity duration-300 ${
+            imageLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
           style={{
             transform: `translateX(${dragOffset * 0.3}px)`,
             transition: dragOffset === 0 ? 'transform 0.2s ease-out' : 'none',
           }}
           draggable={false}
+          onLoad={() => setImageLoaded(true)}
           onError={(e) => {
             console.error('Failed to load image:', currentPhoto.src);
+            setImageLoaded(true);
             if (currentPhoto.thumbnail) {
               (e.target as HTMLImageElement).src = currentPhoto.thumbnail;
             }
           }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: imageLoaded ? 1 : 0, scale: 1 }}
+          transition={{ duration: 0.2 }}
         />
       </div>
 
-      {/* Swipe hint on mobile */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 text-white/40 text-xs md:hidden bg-black/30 backdrop-blur-sm px-3 py-1.5 rounded-full">
-        Przesuń lub dotknij tło aby zamknąć
+      {/* Bottom scrollbar/slider */}
+      <div className="relative z-20 px-4 md:px-8 pb-4 md:pb-6">
+        <div 
+          ref={scrollbarRef}
+          className="relative h-2 bg-white/10 rounded-full cursor-pointer overflow-hidden backdrop-blur-sm"
+          onClick={handleScrollbarClick}
+        >
+          {/* Progress fill */}
+          <motion.div 
+            className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-white/40 to-white/60 rounded-full"
+            style={{ width: `${progressPercentage}%` }}
+            layoutId="cinema-progress"
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          />
+          
+          {/* Draggable thumb */}
+          <motion.div
+            className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg cursor-grab active:cursor-grabbing"
+            style={{ left: `calc(${progressPercentage}% - 8px)` }}
+            whileHover={{ scale: 1.3 }}
+            whileTap={{ scale: 1.1 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          />
+        </div>
+        
+        {/* Photo counter below scrollbar */}
+        <div className="flex justify-between items-center mt-2 text-xs text-white/40">
+          <span>{currentFlatIndex + 1} / {allPhotos.length}</span>
+          <span className="hidden md:inline">Kliknij tło aby zamknąć • Strzałki ← → nawigacja</span>
+          <span className="md:hidden">Przesuń lub dotknij tło</span>
+        </div>
       </div>
     </motion.div>
   );
@@ -302,6 +362,7 @@ interface SliderProps {
 const Slider3D: React.FC<SliderProps> = ({ photos, onPhotoClick, activeIndex, onActiveChange }) => {
   const [isDragging, setIsDragging] = useState(false);
   const dragStartX = useRef(0);
+  const scrollbarRef = useRef<HTMLDivElement>(null);
 
   const handlePrev = useCallback(() => {
     if (photos.length === 0) return;
@@ -353,6 +414,16 @@ const Slider3D: React.FC<SliderProps> = ({ photos, onPhotoClick, activeIndex, on
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [handlePrev, handleNext]);
+
+  // Scrollbar click handler
+  const handleScrollbarClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!scrollbarRef.current || photos.length <= 1) return;
+    const rect = scrollbarRef.current.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const percentage = clickX / rect.width;
+    const newIndex = Math.round(percentage * (photos.length - 1));
+    onActiveChange(Math.max(0, Math.min(newIndex, photos.length - 1)));
+  };
 
   const getCardStyle = (index: number): React.CSSProperties => {
     const diff = (index - activeIndex + photos.length) % photos.length;
@@ -459,12 +530,39 @@ const Slider3D: React.FC<SliderProps> = ({ photos, onPhotoClick, activeIndex, on
         </>
       )}
 
-      {/* Counter - bottom right */}
-      <div className="absolute bottom-2 md:bottom-4 right-2 md:right-4 bg-black/30 backdrop-blur-sm px-2 md:px-3 py-1 rounded-md">
-        <span className="text-white/60 text-xs">
-          {activeIndex + 1}/{photos.length}
-        </span>
-      </div>
+      {/* Bottom scrollbar/slider */}
+      {photos.length > 1 && (
+        <div className="absolute bottom-2 md:bottom-4 left-1/2 -translate-x-1/2 w-[60%] md:w-[50%] max-w-md z-40">
+          <div 
+            ref={scrollbarRef}
+            className="relative h-1.5 md:h-2 bg-white/10 rounded-full cursor-pointer overflow-hidden backdrop-blur-sm"
+            onClick={handleScrollbarClick}
+          >
+            {/* Progress fill */}
+            <motion.div 
+              className="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-white/30 to-white/50 rounded-full"
+              style={{ width: `${(activeIndex / (photos.length - 1)) * 100}%` }}
+              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            />
+            
+            {/* Draggable thumb */}
+            <motion.div
+              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 md:w-4 md:h-4 bg-white rounded-full shadow-lg cursor-grab active:cursor-grabbing"
+              style={{ left: `calc(${(activeIndex / (photos.length - 1)) * 100}% - 6px)` }}
+              whileHover={{ scale: 1.3 }}
+              whileTap={{ scale: 1.1 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+            />
+          </div>
+          
+          {/* Counter below scrollbar */}
+          <div className="text-center mt-1">
+            <span className="text-white/40 text-xs">
+              {activeIndex + 1} / {photos.length}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -492,6 +590,7 @@ const GalleryPage: React.FC = () => {
   });
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const currentAlbum = albums[activeAlbumIndex];
   const canDownload = userRole === 'owner';
@@ -618,19 +717,36 @@ const GalleryPage: React.FC = () => {
           </div>
           <h1 className="text-2xl font-bold text-white text-center mb-2">Galeria</h1>
           <p className="text-white/50 text-center text-sm mb-6">Wprowadź hasło aby kontynuować</p>
-          <input
-            type="password"
-            value={passwordInput}
-            onChange={(e) => {
-              setPasswordInput(e.target.value);
-              setPasswordError(false);
-            }}
-            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            placeholder="Hasło"
-            className={`w-full px-4 py-3 bg-white/10 border rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 ${
-              passwordError ? 'border-red-500' : 'border-white/20'
-            }`}
-          />
+          
+          {/* Password input with eye toggle */}
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={passwordInput}
+              onChange={(e) => {
+                setPasswordInput(e.target.value);
+                setPasswordError(false);
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              placeholder="Hasło"
+              className={`w-full px-4 py-3 pr-12 bg-white/10 border rounded-lg text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/30 ${
+                passwordError ? 'border-red-500' : 'border-white/20'
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-white/50 hover:text-white/80 transition-colors"
+              title={showPassword ? 'Ukryj hasło' : 'Pokaż hasło'}
+            >
+              {showPassword ? (
+                <EyeOff className="w-5 h-5" />
+              ) : (
+                <Eye className="w-5 h-5" />
+              )}
+            </button>
+          </div>
+          
           {passwordError && (
             <p className="text-red-400 text-sm mt-2">Nieprawidłowe hasło</p>
           )}
