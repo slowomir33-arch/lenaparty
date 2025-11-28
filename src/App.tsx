@@ -472,7 +472,10 @@ const Slider3D: React.FC<SliderProps> = ({ photos, onPhotoClick, activeIndex, on
 // ============================================
 // GALLERY PAGE - Clean UI
 // ============================================
-const PASSWORD = 'lena2025!';
+const PASSWORD_OWNER = 'lena2025!';  // Pełny dostęp z pobieraniem
+const PASSWORD_GUEST = 'lenka2025';   // Tylko podgląd, bez pobierania
+
+type UserRole = 'owner' | 'guest' | null;
 
 const GalleryPage: React.FC = () => {
   const [albums, setAlbums] = useState<Album[]>([]);
@@ -483,19 +486,25 @@ const GalleryPage: React.FC = () => {
   const [cinemaMode, setCinemaMode] = useState<{ albumIndex: number; photoIndex: number } | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    return sessionStorage.getItem('gallery_auth') === 'true';
+  const [userRole, setUserRole] = useState<UserRole>(() => {
+    const saved = sessionStorage.getItem('gallery_role');
+    return (saved === 'owner' || saved === 'guest') ? saved : null;
   });
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState(false);
 
   const currentAlbum = albums[activeAlbumIndex];
+  const canDownload = userRole === 'owner';
 
   // Password check
   const handleLogin = () => {
-    if (passwordInput === PASSWORD) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('gallery_auth', 'true');
+    if (passwordInput === PASSWORD_OWNER) {
+      setUserRole('owner');
+      sessionStorage.setItem('gallery_role', 'owner');
+      setPasswordError(false);
+    } else if (passwordInput === PASSWORD_GUEST) {
+      setUserRole('guest');
+      sessionStorage.setItem('gallery_role', 'guest');
       setPasswordError(false);
     } else {
       setPasswordError(true);
@@ -594,7 +603,7 @@ const GalleryPage: React.FC = () => {
   };
 
   // Password screen
-  if (!isAuthenticated) {
+  if (!userRole) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center p-4">
         <motion.div
@@ -718,56 +727,70 @@ const GalleryPage: React.FC = () => {
               </div>
 
               {/* Selection checkbox */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  toggleAlbumSelection(album.id);
-                }}
-                className="absolute top-2 right-2 p-1 bg-black/50 rounded-md hover:bg-black/70 transition-colors"
-              >
-                {selectedAlbums.has(album.id) ? (
-                  <CheckSquare className="w-5 h-5 text-green-400" />
-                ) : (
-                  <Square className="w-5 h-5 text-white/60" />
-                )}
-              </button>
+              {/* Selection checkbox - only for owners */}
+              {canDownload && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleAlbumSelection(album.id);
+                  }}
+                  className="absolute top-2 right-2 p-1 bg-black/50 rounded-md hover:bg-black/70 transition-colors"
+                >
+                  {selectedAlbums.has(album.id) ? (
+                    <CheckSquare className="w-5 h-5 text-green-400" />
+                  ) : (
+                    <Square className="w-5 h-5 text-white/60" />
+                  )}
+                </button>
+              )}
             </motion.div>
           ))}
         </div>
 
-        {/* Download Section */}
-        <div className="p-4 border-t border-white/10 space-y-2">
-          {currentAlbum && (
+        {/* Download Section - only for owners */}
+        {canDownload && (
+          <div className="p-4 border-t border-white/10 space-y-2">
+            {currentAlbum && (
+              <button
+                onClick={() => handleDownloadAlbum(currentAlbum)}
+                disabled={isDownloading}
+                className="w-full py-2.5 px-4 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                Pobierz album
+              </button>
+            )}
+
+            {selectedAlbums.size > 0 && (
+              <button
+                onClick={handleDownloadSelected}
+                disabled={isDownloading}
+                className="w-full py-2.5 px-4 bg-green-600/80 hover:bg-green-600 rounded-lg text-white text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              >
+                <Download className="w-4 h-4" />
+                Pobierz zaznaczone ({selectedAlbums.size})
+              </button>
+            )}
+
             <button
-              onClick={() => handleDownloadAlbum(currentAlbum)}
-              disabled={isDownloading}
-              className="w-full py-2.5 px-4 bg-white/10 hover:bg-white/20 rounded-lg text-white text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              onClick={handleDownloadAll}
+              disabled={isDownloading || albums.length === 0}
+              className="w-full py-2.5 px-4 bg-white/5 hover:bg-white/10 rounded-lg text-white/70 text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
-              Pobierz album
+              Pobierz całość
             </button>
-          )}
+          </div>
+        )}
 
-          {selectedAlbums.size > 0 && (
-            <button
-              onClick={handleDownloadSelected}
-              disabled={isDownloading}
-              className="w-full py-2.5 px-4 bg-green-600/80 hover:bg-green-600 rounded-lg text-white text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-            >
-              <Download className="w-4 h-4" />
-              Pobierz zaznaczone ({selectedAlbums.size})
-            </button>
-          )}
-
-          <button
-            onClick={handleDownloadAll}
-            disabled={isDownloading || albums.length === 0}
-            className="w-full py-2.5 px-4 bg-white/5 hover:bg-white/10 rounded-lg text-white/70 text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            Pobierz całość
-          </button>
-        </div>
+        {/* Guest mode indicator */}
+        {!canDownload && (
+          <div className="p-4 border-t border-white/10">
+            <p className="text-white/40 text-xs text-center">
+              Tryb gościa - tylko podgląd
+            </p>
+          </div>
+        )}
       </motion.aside>
 
       {/* Overlay for mobile */}

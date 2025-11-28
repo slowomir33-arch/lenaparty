@@ -19,7 +19,7 @@ const AmbientBackground: React.FC<AmbientBackgroundProps> = ({
         alt=""
         className="ambient-background"
         initial={{ opacity: 0, scale: 1.6 }}
-        animate={{ opacity: 0.7, scale: 1.5 }}
+        animate={{ opacity: 1, scale: 1.5 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 1.5, ease: 'easeOut' }}
       />
