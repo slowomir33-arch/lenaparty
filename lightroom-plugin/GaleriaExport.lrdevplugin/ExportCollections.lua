@@ -30,6 +30,7 @@ local LrColor = import 'LrColor'
 -- ============================================
 
 local NAMING_TOKENS = {
+  { id = "album", label = "📁 Nazwa albumu", token = "ALBUM_NAME", preview = "NazwaAlbumu", isAlbumName = true },
   { id = "name", label = "📷 Oryginalna nazwa", token = "{{image_name}}", preview = "DSC_1234" },
   { id = "seq", label = "🔢 Numer (001)", token = "{{sequence_001}}", preview = "001" },
   { id = "date", label = "📅 Data", token = "{{date_YYYY}}-{{date_MM}}-{{date_DD}}", preview = "2025-11-28" },
@@ -43,8 +44,10 @@ local NAMING_TOKENS = {
 local QUICK_TEMPLATES = {
   { name = "🏷️ Oryginalna nazwa", tokens = { "name" } },
   { name = "🔢 Tylko numer", tokens = { "seq" } },
+  { name = "📁 Album + Numer", tokens = { "album", "sep_under", "seq" } },
   { name = "📅 Data + Numer", tokens = { "date", "sep_under", "seq" } },
   { name = "📷 Nazwa + Numer", tokens = { "name", "sep_under", "seq" } },
+  { name = "📁 Album + Nazwa", tokens = { "album", "sep_under", "name" } },
   { name = "✏️ Własny + Numer", tokens = { "custom", "sep_under", "seq" } },
 }
 
@@ -170,13 +173,15 @@ end
 -- ============================================
 
 -- Funkcja do budowania tokena LR z listy wybranych tokenów
-local function buildTokenString(selectedTokens, customText)
+local function buildTokenString(selectedTokens, customText, albumName)
   local result = ""
   for _, tokenId in ipairs(selectedTokens) do
     for _, token in ipairs(NAMING_TOKENS) do
       if token.id == tokenId then
         if token.id == "custom" then
           result = result .. customText
+        elseif token.isAlbumName then
+          result = result .. (albumName or "Album")
         else
           result = result .. token.token
         end
@@ -188,13 +193,15 @@ local function buildTokenString(selectedTokens, customText)
 end
 
 -- Funkcja do generowania podglądu
-local function buildPreviewString(selectedTokens, customText)
+local function buildPreviewString(selectedTokens, customText, albumName)
   local result = ""
   for _, tokenId in ipairs(selectedTokens) do
     for _, token in ipairs(NAMING_TOKENS) do
       if token.id == tokenId then
         if token.id == "custom" then
           result = result .. customText
+        elseif token.isAlbumName then
+          result = result .. (albumName or "NazwaAlbumu")
         else
           result = result .. token.preview
         end
@@ -207,7 +214,10 @@ end
 
 local function showSelectionDialog(allCollections)
   local selectedCollections = {}
-  local finalNamingTokens = "{{image_name}}"
+  local namingConfig = {
+    tokens = { "name" },
+    customText = "MojeZdjecie"
+  }
   
   LrFunctionContext.callWithContext("selectionDialog", function(dialogContext)
     local props = LrBinding.makePropertyTable(dialogContext)
@@ -388,23 +398,24 @@ local function showSelectionDialog(allCollections)
       -- Kafelki tokenów - rząd 1
       f:row {
         spacing = f:label_spacing(),
-        tokenButtons[1], -- Oryginalna nazwa
-        tokenButtons[2], -- Numer
-        tokenButtons[3], -- Data
+        tokenButtons[1], -- Album
+        tokenButtons[2], -- Oryginalna nazwa
+        tokenButtons[3], -- Numer
       },
       
       -- Kafelki tokenów - rząd 2
       f:row {
         spacing = f:label_spacing(),
-        tokenButtons[4], -- Rok
-        tokenButtons[5], -- Własny tekst
+        tokenButtons[4], -- Data
+        tokenButtons[5], -- Rok
+        tokenButtons[6], -- Własny tekst
       },
       
       -- Separatory
       f:row {
         spacing = f:label_spacing(),
-        tokenButtons[6], -- Myślnik
-        tokenButtons[7], -- Podkreślnik
+        tokenButtons[7], -- Myślnik
+        tokenButtons[8], -- Podkreślnik
         f:push_button {
           title = "⬅️ Cofnij",
           width = 80,
@@ -476,21 +487,23 @@ local function showSelectionDialog(allCollections)
         end
       end
       
-      finalNamingTokens = buildTokenString(props.activeTokens, props.customText)
-      if finalNamingTokens == "" then
-        finalNamingTokens = "{{image_name}}"
+      -- Zapisz konfigurację nazewnictwa (tokeny + własny tekst)
+      namingConfig.tokens = {}
+      for _, t in ipairs(props.activeTokens) do
+        table.insert(namingConfig.tokens, t)
       end
+      namingConfig.customText = props.customText
     end
   end)
   
-  return selectedCollections, finalNamingTokens
+  return selectedCollections, namingConfig
 end
 
 -- ============================================
 -- EKSPORT Z POSTĘPEM
 -- ============================================
 
-local function doExportWithProgress(selectedCollections, destinationFolder, namingTokens)
+local function doExportWithProgress(selectedCollections, destinationFolder, namingConfig)
   LrFunctionContext.callWithContext("exportProgress", function(context)
     local progressScope = LrProgressScope({
       title = "Eksport albumów do Galeria Online",
@@ -505,6 +518,12 @@ local function doExportWithProgress(selectedCollections, destinationFolder, nami
       local photos = collection:getPhotos()
       
       if #photos > 0 then
+        -- Zbuduj nazewnictwo z nazwą albumu
+        local namingTokens = buildTokenString(namingConfig.tokens, namingConfig.customText, collectionName)
+        if namingTokens == "" then
+          namingTokens = "{{image_name}}"
+        end
+        
         -- Utwórz foldery
         local albumFolder = LrPathUtils.child(destinationFolder, collectionName)
         local lightFolder = LrPathUtils.child(albumFolder, "light")
@@ -579,7 +598,7 @@ local function exportCollections()
       return
     end
     
-    local selectedCollections, namingTokens = showSelectionDialog(allCollections)
+    local selectedCollections, namingConfig = showSelectionDialog(allCollections)
     
     if #selectedCollections == 0 then return end
     
@@ -593,7 +612,7 @@ local function exportCollections()
     
     if not destinationFolder or #destinationFolder == 0 then return end
     
-    doExportWithProgress(selectedCollections, destinationFolder[1], namingTokens)
+    doExportWithProgress(selectedCollections, destinationFolder[1], namingConfig)
   end)
 end
 
