@@ -13,7 +13,7 @@ import ftpUploader from './ftp-uploader.js';
 const app = express();
 const PORT = process.env.PORT || 3001;
 const USE_FTP = ftpUploader.isConfigured();
-const APP_VERSION = 'batch-upload-v1';
+const APP_VERSION = 'batch-upload-v3-FOLDER-FIX';
 
 // ============================================
 // CONFIGURATION

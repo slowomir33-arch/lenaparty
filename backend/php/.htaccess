@@ -1,0 +1,12 @@
+RewriteEngine On
+RewriteBase /
+
+# Serve static uploads directly
+RewriteCond %{REQUEST_URI} ^/uploads/
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# Route everything to PHP
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]

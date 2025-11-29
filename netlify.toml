@@ -4,7 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  VITE_API_URL = "https://api.lenaparty.pl"
+  VITE_API_URL = "https://backend.lenaparty.pl"
   NPM_FLAGS = "--prefer-offline"
 
 [[redirects]]
