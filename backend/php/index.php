@@ -26,6 +26,25 @@ try {
         handle_health();
     }
 
+    // Debug endpoint to check PHP limits and upload info
+    if ($method === 'GET' && count($segments) === 2 && $segments[1] === 'debug') {
+        send_json(200, [
+            'upload_max_filesize' => ini_get('upload_max_filesize'),
+            'post_max_size' => ini_get('post_max_size'),
+            'max_file_uploads' => ini_get('max_file_uploads'),
+            'memory_limit' => ini_get('memory_limit'),
+        ]);
+    }
+
+    if ($method === 'POST' && count($segments) === 2 && $segments[1] === 'debug') {
+        send_json(200, [
+            'files' => $_FILES,
+            'post' => $_POST,
+            'content_type' => $_SERVER['CONTENT_TYPE'] ?? 'not set',
+            'content_length' => $_SERVER['CONTENT_LENGTH'] ?? 'not set',
+        ]);
+    }
+
     if ($method === 'GET' && count($segments) === 2 && $segments[1] === 'albums') {
         handle_list_albums();
     }
@@ -299,6 +318,42 @@ function handle_multi_download(): void {
     });
 }
 
+function read_json_body(): array {
+    $raw = file_get_contents('php://input');
+    if ($raw === false || $raw === '') {
+        return [];
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        throw new RuntimeException('Nieprawidłowe dane JSON');
+    }
+    return $data;
+}
+
+function find_album_index(array $albums, string $albumId): int {
+    foreach ($albums as $index => $album) {
+        if (($album['id'] ?? null) === $albumId) {
+            return (int) $index;
+        }
+    }
+    return -1;
+}
+
+function delete_path(string $path): void {
+    if (!file_exists($path)) {
+        return;
+    }
+    if (is_file($path) || is_link($path)) {
+        @unlink($path);
+        return;
+    }
+    $items = new FilesystemIterator($path);
+    foreach ($items as $item) {
+        delete_path($item->getPathname());
+    }
+    @rmdir($path);
+}
+
 function ingest_files_into_album(string $albumId, array $files, array &$albumMeta): array {
     $albumPath = ALBUMS_DIR . '/' . $albumId;
     $lightPath = $albumPath . '/light';
@@ -325,42 +380,6 @@ function ingest_files_into_album(string $albumId, array $files, array &$albumMet
         } else {
             $groups['other'][] = $entry;
         }
-    }
-
-    function read_json_body(): array {
-        $raw = file_get_contents('php://input');
-        if ($raw === false || $raw === '') {
-            return [];
-        }
-        $data = json_decode($raw, true);
-        if (!is_array($data)) {
-            throw new RuntimeException('Nieprawidłowe dane JSON');
-        }
-        return $data;
-    }
-
-    function find_album_index(array $albums, string $albumId): int {
-        foreach ($albums as $index => $album) {
-            if (($album['id'] ?? null) === $albumId) {
-                return (int) $index;
-            }
-        }
-        return -1;
-    }
-
-    function delete_path(string $path): void {
-        if (!file_exists($path)) {
-            return;
-        }
-        if (is_file($path) || is_link($path)) {
-            @unlink($path);
-            return;
-        }
-        $items = new FilesystemIterator($path);
-        foreach ($items as $item) {
-            delete_path($item->getPathname());
-        }
-        @rmdir($path);
     }
 
     $hasLightBatch = count($groups['light']) > 0;

@@ -154,7 +154,8 @@ export async function deletePhoto(
 // BULK UPLOAD (Create album + upload photos)
 // ============================================
 
-const BATCH_SIZE = 30; // Upload 30 files at a time to avoid HTTP/2 errors
+const BATCH_SIZE = 5; // Upload 5 files at a time (for large files like 50MB each)
+const UPLOAD_TIMEOUT = 600000; // 10 minutes timeout per batch
 
 /**
  * Upload a single batch of files
@@ -189,9 +190,9 @@ async function uploadBatch(
     };
     
     xhr.onerror = () => reject(new Error('Network error'));
-    xhr.ontimeout = () => reject(new Error('Upload timeout'));
+    xhr.ontimeout = () => reject(new Error('Upload timeout - plik za duży lub wolne połączenie'));
     
-    xhr.timeout = 300000; // 5 minutes timeout per batch
+    xhr.timeout = UPLOAD_TIMEOUT;
     xhr.send(formData);
   });
 }
